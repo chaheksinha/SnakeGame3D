@@ -18,7 +18,8 @@ export class AudioSystem {
 
   toggleAudio() {
     this.isMuted = !this.isMuted;
-    return this.isMuted;
+    if (this.isMuted) this.stopMusic();
+    return !this.isMuted;
   }
 
   startMusic() {
@@ -83,23 +84,28 @@ export class AudioSystem {
     this.musicTimer = setTimeout(() => this.playChiptuneStep(), tempoMs);
   }
 
-  playEat() {
+  playEat(combo = 1) {
     if (this.isMuted || !this.ctx) return;
     const t = this.ctx.currentTime;
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
-    
+    const pitch = Math.min(1200, 420 + combo * 90);
+
     osc.type = 'sine';
-    osc.frequency.setValueAtTime(440, t);
-    osc.frequency.exponentialRampToValueAtTime(880, t + 0.08);
-    
+    osc.frequency.setValueAtTime(pitch, t);
+    osc.frequency.exponentialRampToValueAtTime(pitch * 1.7, t + 0.08);
+
     gain.gain.setValueAtTime(0.15, t);
-    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
-    
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
+
     osc.connect(gain);
     gain.connect(this.ctx.destination);
     osc.start(t);
-    osc.stop(t + 0.08);
+    osc.stop(t + 0.09);
+  }
+
+  playLevelUp() {
+    this.playOverclock();
   }
 
   playOverclock() {

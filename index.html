@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>BLOCK SNAKE 3D - Retro Voxel Snake Game</title>
     <meta name="description" content="A blocky 16-bit 3D snake game">
     <link rel="icon" href="data:,">
@@ -53,7 +53,7 @@
         <!-- Top Center: Objective -->
         <div class="hud-top-center">
             <div id="objective-banner" class="pixel-panel banner-panel">
-                Collect Apples
+                APPLES 0/8
             </div>
             <div id="buff-container"></div>
         </div>
@@ -73,15 +73,15 @@
             </div>
         </div>
 
-        <!-- Bottom Right: Audio & Settings -->
-        <div class="hud-bottom-right" style="display: flex; gap: 10px;">
-            <button id="pause-btn" class="icon-btn pixel-panel">
-                <span id="pause-icon">⏸️</span>
+        <!-- Icon cluster: desktop bottom-right, mobile top-right via CSS -->
+        <div class="hud-bottom-right" id="hud-icons">
+            <button id="pause-btn" class="icon-btn pixel-panel" type="button" aria-label="Pause">
+                <span id="pause-icon">⏸</span>
             </button>
-            <button id="settings-btn" class="icon-btn pixel-panel">
-                <span id="settings-icon">⚙️</span>
+            <button id="settings-btn" class="icon-btn pixel-panel" type="button" aria-label="Settings">
+                <span id="settings-icon">⚙</span>
             </button>
-            <button id="audio-toggle-btn" class="icon-btn pixel-panel">
+            <button id="audio-toggle-btn" class="icon-btn pixel-panel" type="button" aria-label="Audio">
                 <span id="audio-icon">🔊</span>
             </button>
         </div>
@@ -108,14 +108,17 @@
             
             <div class="controls-guide">
                 <div class="hud-label" style="margin-bottom: 8px;">CONTROLS</div>
-                <div class="control-row">
+                <div class="control-row desktop-controls-hint">
                     <span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span> / Arrows to Move
                 </div>
-                <div class="control-row">
+                <div class="control-row desktop-controls-hint">
                     <span class="key">SHIFT</span> Boost &nbsp;&nbsp; <span class="key">SPACE</span> Jump
                 </div>
-                <div class="control-row">
+                <div class="control-row desktop-controls-hint">
                     <span class="key">P</span> Pause
+                </div>
+                <div class="control-row touch-controls-hint">
+                    Left stick steers &nbsp;·&nbsp; JUMP / BOOST on the right
                 </div>
             </div>
 
@@ -135,11 +138,11 @@
     <div id="pause-screen" class="overlay-screen hidden">
         <div class="pixel-modal center-content">
             <h2 class="pixel-title pixel-blink">PAUSED</h2>
-            <p class="description" style="margin-bottom: 24px;">Press P or ESC to resume</p>
+            <p class="description" style="margin-bottom: 24px;">Tap RESUME or press P / ESC</p>
             
             <div class="btn-group">
-                <button id="resume-btn" class="pixel-btn">RESUME</button>
-                <button id="restart-pause-btn" class="pixel-btn secondary">RESTART</button>
+                <button id="resume-btn" class="pixel-btn" type="button">RESUME</button>
+                <button id="restart-pause-btn" class="pixel-btn secondary" type="button">RESTART</button>
             </div>
         </div>
     </div>
@@ -203,12 +206,16 @@
 
     <!-- Touch Controls -->
     <div id="touch-controls" class="hidden">
-        <div id="joystick-zone">
-            <div id="joystick-stick"></div>
+        <div id="joystick-wrap">
+            <div id="joystick-zone">
+                <div id="joystick-deadzone"></div>
+                <div id="joystick-stick"></div>
+            </div>
+            <div class="touch-hint">STEER</div>
         </div>
         <div id="touch-actions">
-            <button id="touch-jump-btn" class="touch-btn">JMP</button>
-            <button id="touch-boost-btn" class="touch-btn">BST</button>
+            <button id="touch-jump-btn" class="touch-btn" type="button">JUMP</button>
+            <button id="touch-boost-btn" class="touch-btn touch-btn-boost" type="button">BOOST</button>
         </div>
     </div>
 

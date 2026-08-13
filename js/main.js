@@ -26,11 +26,17 @@ class GameApp {
 
     this.overclockTimer = 0;
     this.scoreMultiplier = 1;
+    this.combo = 0;
+    this.comboTimer = 0;
+    this.applesEaten = 0;
 
     this.keysPressed = {};
     this.touchSteering = 0;
     this.touchBoosting = false;
-    
+    this.isTouchUI = false;
+    this.pausedForSettings = false;
+    this.resumeGrace = false;
+
     // Begin async initialization
     this.init();
   }
@@ -64,6 +70,10 @@ class GameApp {
     await sleep(20);
     this.foodManager = new FoodManager(this.engine.scene);
     this.obstacles = new Obstacles(this.engine.scene);
+    this.foodManager.setContext(
+      () => this.snake.headPos,
+      () => this.obstacles.getBlockerPositions()
+    );
     this.uiManager = new UIManager();
 
     this.updateLoading(100, 'Ready!');
@@ -84,12 +94,17 @@ class GameApp {
       this.keysPressed[e.code] = true;
       this.audioSystem.init();
 
-      // Prevent default for game keys to avoid page scroll
       if (['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) {
         e.preventDefault();
       }
 
       if (e.code === 'KeyP' || e.code === 'Escape') {
+        const settings = document.getElementById('settings-screen');
+        if (settings && !settings.classList.contains('hidden')) {
+          settings.classList.add('hidden');
+          this.closeSettings();
+          return;
+        }
         this.togglePause();
       }
       if (e.code === 'KeyR' && this.gameState === 'GAME_OVER') {
@@ -104,69 +119,122 @@ class GameApp {
       this.keysPressed[e.code] = false;
     });
 
+    document.addEventListener('touchmove', (e) => {
+      if (this.gameState === 'PLAYING') e.preventDefault();
+    }, { passive: false });
+
     this.setupTouchControls();
   }
 
   setupTouchControls() {
     const hasTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
     const isMobileUserAgent = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    
-    // Only show touch controls if the device actually reports as mobile/tablet AND has touch
-    if (!hasTouch || !isMobileUserAgent) return;
+    const coarsePointer = window.matchMedia('(pointer: coarse)').matches;
+    const narrowScreen = Math.min(window.innerWidth, window.innerHeight) < 900;
 
-    const touchLayer = document.getElementById('touch-controls');
-    if (touchLayer) touchLayer.classList.remove('hidden');
+    this.isTouchUI = hasTouch && (isMobileUserAgent || coarsePointer || narrowScreen);
+    if (!this.isTouchUI) return;
+
+    document.body.classList.add('touch-ui');
 
     const stick = document.getElementById('joystick-stick');
     const zone = document.getElementById('joystick-zone');
     if (!zone || !stick) return;
 
+    const DEADZONE = 0.22;
+    const SENSITIVITY = 0.62;
     let touchId = null;
-    let startX = 0;
+
+    const resetStick = () => {
+      touchId = null;
+      stick.style.transform = 'translate(-50%, -50%)';
+      this.touchSteering = 0;
+    };
+
+    const applyStick = (clientX, clientY) => {
+      const rect = zone.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      let dx = clientX - cx;
+      let dy = clientY - cy;
+      const maxR = rect.width * 0.32;
+      const dist = Math.hypot(dx, dy) || 1;
+      if (dist > maxR) {
+        dx = (dx / dist) * maxR;
+        dy = (dy / dist) * maxR;
+      }
+      stick.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+
+      const nx = dx / maxR;
+      const absX = Math.abs(nx);
+      if (absX <= DEADZONE) {
+        this.touchSteering = 0;
+        return;
+      }
+      const scaled = (absX - DEADZONE) / (1 - DEADZONE);
+      this.touchSteering = Math.sign(nx) * Math.pow(scaled, 1.35) * SENSITIVITY;
+    };
 
     zone.addEventListener('touchstart', (e) => {
       e.preventDefault();
+      if (this.gameState !== 'PLAYING') return;
       const touch = e.changedTouches[0];
       touchId = touch.identifier;
-      startX = touch.clientX;
-    });
+      applyStick(touch.clientX, touch.clientY);
+    }, { passive: false });
 
     zone.addEventListener('touchmove', (e) => {
       e.preventDefault();
       for (const touch of e.changedTouches) {
-        if (touch.identifier === touchId) {
-          const deltaX = touch.clientX - startX;
-          const clampedX = Math.max(-40, Math.min(40, deltaX));
-          stick.style.transform = `translateX(${clampedX}px)`;
-          this.touchSteering = clampedX / 40;
-        }
+        if (touch.identifier === touchId) applyStick(touch.clientX, touch.clientY);
       }
-    });
+    }, { passive: false });
 
     const endTouch = (e) => {
       for (const touch of e.changedTouches) {
-        if (touch.identifier === touchId) {
-          touchId = null;
-          stick.style.transform = 'translateX(0px)';
-          this.touchSteering = 0;
-        }
+        if (touch.identifier === touchId) resetStick();
       }
     };
 
     zone.addEventListener('touchend', endTouch);
     zone.addEventListener('touchcancel', endTouch);
 
+    const bindHold = (el, on, off) => {
+      if (!el) return;
+      el.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (this.gameState === 'PLAYING') on();
+      }, { passive: false });
+      el.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        off();
+      }, { passive: false });
+      el.addEventListener('touchcancel', off);
+    };
+
     const boostBtn = document.getElementById('touch-boost-btn');
-    if (boostBtn) {
-      boostBtn.addEventListener('touchstart', (e) => { e.preventDefault(); this.touchBoosting = true; });
-      boostBtn.addEventListener('touchend', () => { this.touchBoosting = false; });
-      boostBtn.addEventListener('touchcancel', () => { this.touchBoosting = false; });
-    }
+    bindHold(
+      boostBtn,
+      () => {
+        this.touchBoosting = true;
+        boostBtn.classList.add('pressed');
+      },
+      () => {
+        this.touchBoosting = false;
+        boostBtn.classList.remove('pressed');
+      }
+    );
 
     const jumpBtn = document.getElementById('touch-jump-btn');
-    if (jumpBtn) {
-      jumpBtn.addEventListener('touchstart', (e) => { e.preventDefault(); this.tryJump(); });
-    }
+    bindHold(
+      jumpBtn,
+      () => {
+        this.tryJump();
+        jumpBtn.classList.add('pressed');
+      },
+      () => jumpBtn.classList.remove('pressed')
+    );
   }
 
   setupUIButtons() {
@@ -180,8 +248,10 @@ class GameApp {
       this.startGame();
     });
 
-    document.getElementById('resume-btn').addEventListener('click', () => {
-      this.togglePause();
+    document.getElementById('resume-btn').addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (this.gameState === 'PAUSED') this.togglePause();
     });
 
     document.getElementById('restart-pause-btn').addEventListener('click', () => {
@@ -201,17 +271,20 @@ class GameApp {
       });
     }
 
-    // New Pause and Settings buttons
-    document.getElementById('pause-btn')?.addEventListener('click', () => {
-        if (this.gameState === 'PLAYING') this.togglePause();
+    document.getElementById('pause-btn')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (this.gameState === 'PLAYING') this.togglePause();
     });
 
-    document.getElementById('settings-btn')?.addEventListener('click', () => {
-        document.getElementById('settings-screen').classList.remove('hidden');
+    document.getElementById('settings-btn')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.openSettings();
     });
 
     document.getElementById('close-settings-btn')?.addEventListener('click', () => {
-        document.getElementById('settings-screen').classList.add('hidden');
+      this.closeSettings();
     });
 
     document.getElementById('settings-audio-btn')?.addEventListener('click', (e) => {
@@ -235,19 +308,37 @@ class GameApp {
     });
   }
 
+  sectorTarget(sector) {
+    return Math.min(18, 6 + sector * 2);
+  }
+
+  appleStock(sector) {
+    return Math.min(8, 4 + Math.floor(sector / 2));
+  }
+
   startGame() {
     this.score = 0;
     this.sector = 1;
     this.coresCollected = 0;
+    this.sectorCoreTarget = this.sectorTarget(1);
     this.nitroEnergy = 100;
     this.jumpEnergy = 100;
     this.overclockTimer = 0;
     this.scoreMultiplier = 1;
+    this.combo = 0;
+    this.comboTimer = 0;
+    this.applesEaten = 0;
+    this.isBoosting = false;
 
     this.snake.reset();
-    this.foodManager.spawnInitial();
+    this.cameraManager.reset();
     this.obstacles.setupSectorObstacles(this.sector);
+    this.foodManager.spawnInitial(this.appleStock(this.sector));
 
+    this.touchSteering = 0;
+    this.touchBoosting = false;
+    this.pausedForSettings = false;
+    this.resumeGrace = true;
     this.gameState = 'PLAYING';
     this.uiManager.showGameHUD();
     this.audioSystem.startMusic();
@@ -260,13 +351,41 @@ class GameApp {
   togglePause() {
     if (this.gameState === 'PLAYING') {
       this.gameState = 'PAUSED';
+      this.pausedForSettings = false;
+      this.touchSteering = 0;
+      this.touchBoosting = false;
       this.uiManager.showPauseScreen();
       this.audioSystem.stopMusic();
     } else if (this.gameState === 'PAUSED') {
+      document.getElementById('settings-screen')?.classList.add('hidden');
       this.gameState = 'PLAYING';
+      this.pausedForSettings = false;
+      this.resumeGrace = true;
       this.uiManager.hidePauseScreen();
       this.audioSystem.startMusic();
-      this.lastTime = performance.now(); // prevent delta spike after unpause
+    }
+  }
+
+  openSettings() {
+    document.getElementById('settings-screen').classList.remove('hidden');
+    this.uiManager.setTouchVisible(false);
+    if (this.gameState === 'PLAYING') {
+      this.gameState = 'PAUSED';
+      this.pausedForSettings = true;
+      this.touchSteering = 0;
+      this.touchBoosting = false;
+      this.audioSystem.stopMusic();
+    }
+  }
+
+  closeSettings() {
+    document.getElementById('settings-screen').classList.add('hidden');
+    if (this.pausedForSettings && this.gameState === 'PAUSED') {
+      this.pausedForSettings = false;
+      this.gameState = 'PLAYING';
+      this.resumeGrace = true;
+      this.audioSystem.startMusic();
+      this.uiManager.setTouchVisible(true);
     }
   }
 
@@ -307,54 +426,77 @@ class GameApp {
   }
 
   gameLoop(now) {
-    const delta = Math.min(0.05, (now - this.lastTime) / 1000);
-    this.lastTime = now;
+    try {
+      let delta = (now - this.lastTime) / 1000;
+      this.lastTime = now;
 
-    if (this.gameState === 'PLAYING') {
-      this.updateGameLogic(now / 1000, delta);
+      if (this.resumeGrace || !Number.isFinite(delta) || delta < 0 || delta > 0.1) {
+        this.resumeGrace = false;
+        delta = 1 / 60;
+      }
+      delta = Math.min(0.05, Math.max(0, delta));
+
+      if (this.gameState === 'PLAYING') {
+        this.updateGameLogic(now / 1000, delta);
+      } else {
+        this.engine.update(now / 1000, 0, false);
+        this.engine.render();
+        requestAnimationFrame((t) => this.gameLoop(t));
+        return;
+      }
+
+      this.engine.update(now / 1000, delta, this.isBoosting);
+      this.engine.render();
+    } catch (err) {
+      console.error('Game loop error:', err);
     }
-
-    this.engine.update(now / 1000, delta, this.isBoosting);
-    this.engine.render();
 
     requestAnimationFrame((t) => this.gameLoop(t));
   }
 
   updateGameLogic(time, delta) {
-    // 1. Process Inputs — fresh every frame, resets to 0 properly
     const steering = this.getSteeringInput();
     this.isBoosting = this.getBoostInput();
 
-    // 2. Nitro Energy
+    this.snake.applyProgression(this.sector, this.snake.segments.length);
+    this.snake.speedMul = this.overclockTimer > 0 ? 1.12 : 1;
+
+    const nitroDrain = 28 + this.sector * 1.5;
+    const nitroRegen = Math.max(10, 18 - this.sector * 0.6);
     if (this.isBoosting) {
-      this.nitroEnergy = Math.max(0, this.nitroEnergy - delta * 35);
+      this.nitroEnergy = Math.max(0, this.nitroEnergy - delta * nitroDrain);
     } else {
-      this.nitroEnergy = Math.min(this.maxNitro, this.nitroEnergy + delta * 15);
+      this.nitroEnergy = Math.min(this.maxNitro, this.nitroEnergy + delta * nitroRegen);
     }
 
-    // 3. Jump Cooldown
     if (this.jumpEnergy < 100) {
       this.jumpEnergy = Math.min(100, this.jumpEnergy + delta * this.jumpCooldownSpeed);
     }
 
-    // 4. Overclock Timer
+    if (this.comboTimer > 0) {
+      this.comboTimer -= delta;
+      if (this.comboTimer <= 0) this.combo = 0;
+    }
+
     const activeBuffs = [];
     if (this.overclockTimer > 0) {
       this.overclockTimer -= delta;
       this.scoreMultiplier = 2;
       activeBuffs.push(`2X ${Math.ceil(this.overclockTimer)}s`);
-      if (this.overclockTimer <= 0) {
-        this.scoreMultiplier = 1;
-      }
+      if (this.overclockTimer <= 0) this.scoreMultiplier = 1;
     }
     if (this.snake.hasShield) {
-      activeBuffs.push('SHIELD');
+      activeBuffs.push(`SHIELD ${Math.ceil(this.snake.shieldTimer)}s`);
+    }
+    if (this.combo >= 2) {
+      activeBuffs.push(`COMBO x${this.combo}`);
+    }
+    if (this.snake.invulnTimer > 0 && !this.snake.hasShield) {
+      activeBuffs.push('SAFE');
     }
 
-    // 5. Update Snake with FRESH steering value
     this.snake.update(steering, this.isBoosting, delta);
 
-    // 6. Update Camera
     this.cameraManager.update(
       this.snake.headPos,
       this.snake.yaw,
@@ -364,25 +506,26 @@ class GameApp {
       delta
     );
 
-    // 7. Update Collectibles & Check Pickups
     this.foodManager.update(time, delta);
     const pickupType = this.foodManager.checkPickups(this.snake.headPos, this.snake.yOffset);
-    if (pickupType) {
-      this.handlePickup(pickupType);
-    }
+    if (pickupType) this.handlePickup(pickupType);
 
-    // 8. Update Obstacles & Check Collisions
     this.obstacles.update(time, delta);
     const hitObstacle = this.obstacles.checkCollisions(this.snake.headPos, this.snake.yOffset);
     const hitSelf = this.snake.checkSelfCollision();
     const hitBoundary = this.snake.checkBoundaryCollision();
 
     if (hitObstacle || hitSelf || hitBoundary) {
-      this.handleGameOver();
-      return;
+      if (!this.trySurviveHit()) {
+        this.handleGameOver();
+        return;
+      }
     }
 
-    // 9. Update HUD
+    const objective = this.gameMode === 'CAMPAIGN'
+      ? `APPLES ${this.coresCollected}/${this.sectorCoreTarget}`
+      : `WAVE ${this.sector}  •  ${this.applesEaten} APPLES`;
+
     this.uiManager.updateHUD(
       this.score,
       this.highScore,
@@ -390,32 +533,54 @@ class GameApp {
       this.snake.getLengthMeters(),
       this.nitroEnergy,
       this.jumpEnergy,
-      activeBuffs
+      activeBuffs,
+      objective
     );
+  }
+
+  trySurviveHit() {
+    if (this.snake.isInvulnerable) return true;
+    if (this.snake.consumeShield()) {
+      this.cameraManager.triggerShake(0.45);
+      this.audioSystem.playEmp();
+      return true;
+    }
+    return false;
+  }
+
+  advanceSector() {
+    this.sector++;
+    this.coresCollected = 0;
+    this.sectorCoreTarget = this.sectorTarget(this.sector);
+    this.score += 40 * this.sector * this.scoreMultiplier;
+    this.snake.invulnTimer = Math.max(this.snake.invulnTimer, 1.4);
+    this.snake.isInvulnerable = true;
+    this.obstacles.setupSectorObstacles(this.sector);
+    this.foodManager.ensureAppleCount(this.appleStock(this.sector));
+    this.cameraManager.triggerShake(0.4);
+    this.audioSystem.playLevelUp();
   }
 
   handlePickup(type) {
     if (type === 'core') {
-      this.score += 10 * this.scoreMultiplier;
+      if (this.comboTimer > 0) this.combo += 1;
+      else this.combo = 1;
+      this.comboTimer = 3.6;
+      const comboBonus = 1 + Math.max(0, this.combo - 1) * 0.25;
+      this.score += Math.round(10 * this.scoreMultiplier * comboBonus);
       this.coresCollected++;
+      this.applesEaten++;
       this.snake.addSegment();
-      this.audioSystem.playEat();
-
-      // Spawn a new apple to replace eaten one
+      this.audioSystem.playEat(this.combo);
       this.foodManager.spawnItem('core');
+      this.foodManager.ensureAppleCount(this.appleStock(this.sector));
 
-      // Randomly spawn a powerup (20% chance)
-      if (Math.random() < 0.2) {
-        this.foodManager.spawnRandomPowerUp();
-      }
+      if (Math.random() < 0.22) this.foodManager.spawnRandomPowerUp();
 
-      // Campaign Sector Advancement
       if (this.gameMode === 'CAMPAIGN' && this.coresCollected >= this.sectorCoreTarget) {
-        this.sector++;
-        this.coresCollected = 0;
-        this.sectorCoreTarget = Math.min(30, 15 + this.sector * 2); // progressive difficulty
-        this.obstacles.setupSectorObstacles(this.sector);
-        this.cameraManager.triggerShake(0.4);
+        this.advanceSector();
+      } else if (this.gameMode === 'ENDLESS' && this.applesEaten % 12 === 0) {
+        this.advanceSector();
       }
     } else if (type === 'overclock') {
       this.score += 25 * this.scoreMultiplier;
@@ -423,12 +588,14 @@ class GameApp {
       this.audioSystem.playOverclock();
     } else if (type === 'emp') {
       this.score += 15 * this.scoreMultiplier;
-      this.snake.removeSegments(3);
+      this.snake.removeSegments(2);
+      this.snake.invulnTimer = Math.max(this.snake.invulnTimer, 1.0);
+      this.snake.isInvulnerable = true;
       this.audioSystem.playEmp();
-      this.cameraManager.triggerShake(0.4);
+      this.cameraManager.triggerShake(0.35);
     } else if (type === 'shield') {
       this.score += 20 * this.scoreMultiplier;
-      this.snake.hasShield = true;
+      this.snake.grantShield(10);
       this.audioSystem.playShield();
     }
 
@@ -447,7 +614,7 @@ class GameApp {
     this.uiManager.showGameOverScreen(
       this.score,
       this.highScore,
-      this.coresCollected,
+      this.applesEaten,
       this.snake.getLengthMeters()
     );
   }

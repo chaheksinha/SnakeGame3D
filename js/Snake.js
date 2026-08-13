@@ -7,9 +7,11 @@ export class Snake {
         this.scene = scene;
         
         // Movement params
-        this.baseSpeed = 16;
-        this.boostSpeed = 28;
-        this.turnSpeed = 3.8;
+        this.baseSpeed = 14.5;
+        this.boostSpeed = 25.5;
+        this.turnSpeed = 3.65;
+        this.steerSmoothed = 0;
+        this.speedMul = 1;
         
         // FX
         this.dustTrail = new DustTrailSystem(this.scene);
@@ -22,13 +24,15 @@ export class Snake {
         // Jumping
         this.verticalVelocity = 0;
         this.gravity = 30;
-        this.jumpImpulse = 12;
+        this.jumpImpulse = 13.5;
         this.yOffset = 0;
         this.isJumping = false;
         
         // Powerups
         this.hasShield = false;
+        this.shieldTimer = 0;
         this.isInvulnerable = false;
+        this.invulnTimer = 0;
         
         // Setup
         this.soundManager = soundManager;
@@ -170,8 +174,15 @@ export class Snake {
         this.verticalVelocity = 0;
         this.isJumping = false;
         this.hasShield = false;
+        this.shieldTimer = 0;
         this.isInvulnerable = false;
+        this.invulnTimer = 2.0;
+        this.steerSmoothed = 0;
+        this.speedMul = 1;
+        this.baseSpeed = 14.5;
+        this.boostSpeed = 25.5;
         this.pathHistory = [];
+        if (this.headGroup) this.headGroup.visible = true;
         
         while (this.segments.length > 4) {
             const seg = this.segments.pop();
@@ -190,14 +201,55 @@ export class Snake {
         return false;
     }
 
+    grantShield(duration = 10) {
+        this.hasShield = true;
+        this.shieldTimer = duration;
+    }
+
+    consumeShield() {
+        if (this.invulnTimer > 0 || this.isInvulnerable) return true;
+        if (!this.hasShield) return false;
+        this.hasShield = false;
+        this.shieldTimer = 0;
+        this.invulnTimer = 1.35;
+        this.isInvulnerable = true;
+        return true;
+    }
+
+    applyProgression(sector, segmentCount) {
+        const extra = Math.max(0, segmentCount - 4);
+        this.baseSpeed = Math.min(23, 14.5 + sector * 0.45 + extra * 0.04);
+        this.boostSpeed = this.baseSpeed + 10.5;
+        this.turnSpeed = 3.65;
+    }
+
     update(steeringInput, isBoosting, delta) {
-        const currentSpeed = isBoosting ? this.boostSpeed : this.baseSpeed;
-        
-        // Preserve tight turning radius even when boosting
-        const speedRatio = currentSpeed / this.baseSpeed;
-        const turn = steeringInput * this.turnSpeed * speedRatio * delta;
-        
-        this.turnDelta = steeringInput * this.turnSpeed;
+        if (this.invulnTimer > 0) {
+            this.invulnTimer -= delta;
+            this.isInvulnerable = this.invulnTimer > 0;
+            this.headGroup.visible = this.isInvulnerable
+                ? (Math.sin(performance.now() * 0.028) > 0)
+                : true;
+        } else {
+            this.isInvulnerable = false;
+            this.headGroup.visible = true;
+        }
+
+        if (this.hasShield) {
+            this.shieldTimer -= delta;
+            if (this.shieldTimer <= 0) {
+                this.hasShield = false;
+                this.shieldTimer = 0;
+            }
+        }
+
+        this.steerSmoothed += (steeringInput - this.steerSmoothed) * Math.min(1, delta * 10);
+        const steer = this.steerSmoothed;
+
+        const currentSpeed = (isBoosting ? this.boostSpeed : this.baseSpeed) * this.speedMul;
+        const turn = steer * this.turnSpeed * delta;
+
+        this.turnDelta = steer * this.turnSpeed;
         this.yaw += turn;
         
         // Emit dust trail if boosting
@@ -257,9 +309,16 @@ export class Snake {
             z: this.headPos.z,
             yaw: this.yaw
         });
-        
-        const maxHistory = (this.segments.length + 1) * Math.ceil(this.segmentSpacing / (currentSpeed * delta || 0.1)) + 10;
-        if (this.pathHistory.length > maxHistory) {
+
+        // Cap history so a tiny/zero/negative delta after pause cannot
+        // produce Infinity/NaN and crash with "Invalid array length".
+        const step = Math.max(currentSpeed * Math.max(delta, 1 / 120), 0.08);
+        const samples = Math.ceil(this.segmentSpacing / step);
+        const maxHistory = Math.min(
+            8000,
+            Math.max(48, (this.segments.length + 2) * samples + 16)
+        );
+        if (Number.isFinite(maxHistory) && this.pathHistory.length > maxHistory) {
             this.pathHistory.length = maxHistory;
         }
         
@@ -311,20 +370,15 @@ export class Snake {
         if (this.hasShield || this.yOffset > 1.5 || this.isInvulnerable) {
             return false;
         }
-        
-        for (let i = 5; i < this.segments.length; i++) {
+
+        const skip = this.speedMul > 1.05 ? 7 : 6;
+        for (let i = skip; i < this.segments.length; i++) {
             const segment = this.segments[i];
             const dx = this.headPos.x - segment.mesh.position.x;
             const dy = (0.5 + this.yOffset) - segment.mesh.position.y;
             const dz = this.headPos.z - segment.mesh.position.z;
-            
-            const distSq = dx * dx + dy * dy + dz * dz;
-            
-            if (distSq < 0.45) {
-                return true;
-            }
+            if (dx * dx + dy * dy + dz * dz < 0.42) return true;
         }
-        
         return false;
     }
 
@@ -334,6 +388,6 @@ export class Snake {
     }
 
     getLengthMeters() {
-        return (this.segments.length * 0.5).toFixed(1) + "m";
+        return (this.segments.length * 0.5).toFixed(1);
     }
 }

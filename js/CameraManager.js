@@ -66,6 +66,11 @@ export class CameraManager {
     this.camera.updateProjectionMatrix();
   }
 
+  reset() {
+    this.initialized = false;
+    this.shakeIntensity = 0;
+  }
+
   triggerShake(intensity = 0.5) {
     this.shakeIntensity = Math.max(this.shakeIntensity, intensity);
   }

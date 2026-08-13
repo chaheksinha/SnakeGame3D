@@ -12,48 +12,55 @@ export class Obstacles {
     setupSectorObstacles(sector = 1) {
         this.clearAll();
 
-        const numPillars = Math.min(8, 2 + sector * 2);
-        
-        for (let i = 0; i < numPillars; i++) {
-            const angle = Math.random() * Math.PI * 2;
-            const dist = 20 + Math.random() * 35; // 20 to 55 from center
-            const x = Math.cos(angle) * dist;
-            const z = Math.sin(angle) * dist;
-            
-            let pillarGroup;
-            if (Math.random() > 0.5) {
-                pillarGroup = DetailedVoxelFactory.createStonePillar();
-            } else {
-                pillarGroup = DetailedVoxelFactory.createCrateObstacle();
+        const numPillars = Math.min(10, 1 + sector);
+        const minOrigin = 18;
+        const minPair = 12;
+        const placed = [];
+
+        const placeAway = () => {
+            for (let attempt = 0; attempt < 25; attempt++) {
+                const angle = Math.random() * Math.PI * 2;
+                const dist = minOrigin + Math.random() * 40;
+                const x = Math.cos(angle) * dist;
+                const z = Math.sin(angle) * dist;
+                if (placed.every((p) => Math.hypot(p.x - x, p.z - z) >= minPair)) {
+                    placed.push({ x, z });
+                    return { x, z };
+                }
             }
+            const angle = Math.random() * Math.PI * 2;
+            return { x: Math.cos(angle) * 30, z: Math.sin(angle) * 30 };
+        };
+
+        for (let i = 0; i < numPillars; i++) {
+            const { x, z } = placeAway();
+            const isCrate = Math.random() > 0.45;
+            const pillarGroup = isCrate
+                ? DetailedVoxelFactory.createCrateObstacle()
+                : DetailedVoxelFactory.createStonePillar();
             pillarGroup.position.set(x, 0, z);
-            
             this.scene.add(pillarGroup);
             this.pillars.push({
                 group: pillarGroup,
                 meshes: [pillarGroup],
-                radius: 1.5,
+                radius: isCrate ? 1.15 : 1.2,
+                jumpable: isCrate,
+                clearHeight: 1.35,
+                kind: isCrate ? 'crate' : 'pillar',
                 pos: new THREE.Vector3(x, 0, z)
             });
         }
 
         if (sector >= 2) {
-            const numLasers = Math.min(3, sector - 1);
-            
+            const numLasers = Math.min(4, sector - 1);
             for (let i = 0; i < numLasers; i++) {
-                const angle = Math.random() * Math.PI * 2;
-                const dist = 25 + Math.random() * 25;
-                const x = Math.cos(angle) * dist;
-                const z = Math.sin(angle) * dist;
-                
+                const { x, z } = placeAway();
                 const group = DetailedVoxelFactory.createSpikeTrap();
                 group.position.set(x, 0, z);
                 group.rotation.y = Math.random() * Math.PI;
-                
                 this.scene.add(group);
-                
                 this.lasers.push({
-                    group: group,
+                    group,
                     length: 8,
                     pos: new THREE.Vector3(x, 0, z)
                 });
@@ -61,44 +68,40 @@ export class Obstacles {
         }
     }
 
-    update(time, delta) {
-        for (const laser of this.lasers) {
-            laser.group.rotation.y += 0.25 * delta;
-        }
+    getBlockerPositions() {
+        const pts = [];
+        for (const p of this.pillars) pts.push(p.pos);
+        for (const l of this.lasers) pts.push(l.pos);
+        return pts;
     }
 
     checkCollisions(headPos, headYOffset) {
-        // Pillar collisions
         for (const pillar of this.pillars) {
-            const dist = new THREE.Vector2(headPos.x - pillar.pos.x, headPos.z - pillar.pos.z).length();
-            if (dist < pillar.radius + 0.5) { // 0.5 is approx snake head radius
-                return true;
-            }
+            if (pillar.jumpable && headYOffset > pillar.clearHeight) continue;
+            const dist = Math.hypot(headPos.x - pillar.pos.x, headPos.z - pillar.pos.z);
+            if (dist < pillar.radius + 0.45) return pillar.kind;
         }
-        
-        // Lava fence collisions
+
         for (const laser of this.lasers) {
             laser.group.updateMatrixWorld();
             const worldHeadPos = new THREE.Vector3(headPos.x, headYOffset, headPos.z);
             const localPos = worldHeadPos.clone();
             laser.group.worldToLocal(localPos);
-            
-            // Check posts
+
             if (Math.abs(localPos.x) > 3.4 && Math.abs(localPos.x) < 4.6) {
-                if (Math.abs(localPos.z) < 0.9 && localPos.y < 3.5) {
-                    return true;
-                }
+                if (Math.abs(localPos.z) < 0.9 && localPos.y < 3.5) return 'laser';
             }
-            
-            // Check lava fence
             if (Math.abs(localPos.x) <= 3.8) {
-                if (Math.abs(localPos.z) < 0.65 && localPos.y < 1.7) { // 1.2 height + 0.5 margin
-                    return true;
-                }
+                if (Math.abs(localPos.z) < 0.65 && localPos.y < 1.7) return 'laser';
             }
         }
-        
-        return false;
+        return null;
+    }
+
+    update(time, delta) {
+        for (const laser of this.lasers) {
+            laser.group.rotation.y += 0.25 * delta;
+        }
     }
 
     clearAll() {

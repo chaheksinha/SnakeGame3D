@@ -66,9 +66,8 @@ export class FoodManager {
         if (customPos) {
             modelGroup.position.copy(customPos);
         } else {
-            const angle = Math.random() * Math.PI * 2;
-            const dist = Math.random() * (this.arenaRadius - 5);
-            modelGroup.position.set(Math.cos(angle) * dist, 0.4, Math.sin(angle) * dist);
+            const pos = this.findSpawnPosition();
+            modelGroup.position.copy(pos);
         }
         modelGroup.position.y = 0.4;
 
@@ -81,6 +80,37 @@ export class FoodManager {
             phase: Math.random() * Math.PI * 2,
             color: pColor
         });
+    }
+
+    setContext(getSnakePos, getBlockers) {
+        this.getSnakePos = getSnakePos;
+        this.getBlockers = getBlockers;
+    }
+
+    isClear(x, z, minItemDist = 10) {
+        if (Math.hypot(x, z) < 14) return false;
+        const snake = this.getSnakePos ? this.getSnakePos() : null;
+        if (snake && Math.hypot(x - snake.x, z - snake.z) < 12) return false;
+        const blockers = this.getBlockers ? this.getBlockers() : [];
+        for (const b of blockers) {
+            if (Math.hypot(x - b.x, z - b.z) < 8) return false;
+        }
+        for (const item of this.items) {
+            if (Math.hypot(x - item.group.position.x, z - item.group.position.z) < minItemDist) return false;
+        }
+        return true;
+    }
+
+    findSpawnPosition() {
+        for (let attempt = 0; attempt < 32; attempt++) {
+            const angle = Math.random() * Math.PI * 2;
+            const dist = 16 + Math.random() * (this.arenaRadius - 22);
+            const x = Math.cos(angle) * dist;
+            const z = Math.sin(angle) * dist;
+            if (this.isClear(x, z)) return new THREE.Vector3(x, 0.4, z);
+        }
+        const angle = Math.random() * Math.PI * 2;
+        return new THREE.Vector3(Math.cos(angle) * 28, 0.4, Math.sin(angle) * 28);
     }
 
     update(time, delta) {
@@ -160,17 +190,27 @@ export class FoodManager {
         }
     }
 
-    spawnInitial() {
+    spawnInitial(appleCount = 5) {
         this.clearAll();
-        for (let i = 0; i < 5; i++) {
-            this.spawnItem('core');
-        }
+        const n = Math.max(4, Math.min(8, appleCount));
+        for (let i = 0; i < n; i++) this.spawnItem('core');
         this.spawnRandomPowerUp();
     }
 
+    countType(type) {
+        return this.items.filter((item) => item.type === type).length;
+    }
+
+    ensureAppleCount(count) {
+        while (this.countType('core') < count) this.spawnItem('core');
+    }
+
     spawnRandomPowerUp() {
-        const types = ['overclock', 'emp', 'shield'];
-        const type = types[Math.floor(Math.random() * types.length)];
+        if (this.items.filter((i) => i.type !== 'core').length >= 2) return;
+        const roll = Math.random();
+        let type = 'overclock';
+        if (roll < 0.38) type = 'shield';
+        else if (roll < 0.58) type = 'emp';
         this.spawnItem(type);
     }
 
