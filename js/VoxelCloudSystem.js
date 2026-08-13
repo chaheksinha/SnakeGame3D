@@ -71,6 +71,8 @@ export class VoxelCloudSystem {
         this.lowInstancedMesh = new THREE.InstancedMesh(cubeGeo, cloudMatLow, totalLowBlocks);
         this.highInstancedMesh = new THREE.InstancedMesh(flatGeo, cloudMatHigh, totalHighBlocks);
 
+        this.lowInstancedMesh.frustumCulled = true;
+        this.highInstancedMesh.frustumCulled = true;
         this.scene.add(this.lowInstancedMesh);
         this.scene.add(this.highInstancedMesh);
 

@@ -15,6 +15,8 @@ export class Snake {
         
         // FX
         this.dustTrail = new DustTrailSystem(this.scene);
+        this._dustAcc = 0;
+        this.justLanded = false;
         
         // State
         this.headPos = new THREE.Vector3(0, 0.5, 0);
@@ -243,21 +245,26 @@ export class Snake {
             }
         }
 
-        this.steerSmoothed += (steeringInput - this.steerSmoothed) * Math.min(1, delta * 10);
+        this.steerSmoothed += (steeringInput - this.steerSmoothed) * Math.min(1, delta * 11);
         const steer = this.steerSmoothed;
 
         const currentSpeed = (isBoosting ? this.boostSpeed : this.baseSpeed) * this.speedMul;
-        const turn = steer * this.turnSpeed * delta;
+        const turn = steer * this.turnSpeed * (isBoosting ? 0.84 : 1) * delta;
 
         this.turnDelta = steer * this.turnSpeed;
         this.yaw += turn;
-        
-        // Emit dust trail if boosting
+
+        this.justLanded = false;
         if (isBoosting) {
             this.dustTrail.active = true;
-            this.dustTrail.emit(this.headGroup.position, new THREE.Vector3(Math.sin(this.yaw), 0, Math.cos(this.yaw)));
+            this._dustAcc += delta;
+            if (this._dustAcc > 0.05) {
+                this._dustAcc = 0;
+                this.dustTrail.emit(this.headGroup.position, this.yaw);
+            }
         } else {
             this.dustTrail.active = false;
+            this._dustAcc = 0;
         }
         this.dustTrail.update(delta);
         
@@ -268,6 +275,7 @@ export class Snake {
             this.verticalVelocity -= this.gravity * delta;
             this.yOffset += this.verticalVelocity * delta;
             if (this.yOffset <= 0) {
+                this.justLanded = this.isJumping && this.verticalVelocity < -4;
                 this.yOffset = 0;
                 this.verticalVelocity = 0;
                 this.isJumping = false;

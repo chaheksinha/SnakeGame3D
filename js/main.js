@@ -499,6 +499,7 @@ class GameApp {
     }
 
     this.snake.update(steering, this.isBoosting, delta);
+    if (this.snake.justLanded) this.cameraManager.triggerShake(0.22);
 
     this.cameraManager.update(
       this.snake.headPos,
@@ -575,6 +576,10 @@ class GameApp {
       this.applesEaten++;
       this.snake.addSegment();
       this.audioSystem.playEat(this.combo);
+      if (this.combo >= 2) {
+        this.cameraManager.punch(4 + Math.min(8, this.combo));
+        this.cameraManager.triggerShake(0.08 + Math.min(0.2, this.combo * 0.03));
+      }
       this.foodManager.spawnItem('core');
       this.foodManager.ensureAppleCount(this.appleStock(this.sector));
 
@@ -588,6 +593,8 @@ class GameApp {
     } else if (type === 'overclock') {
       this.score += 25 * this.scoreMultiplier;
       this.overclockTimer = 8.0;
+      this.cameraManager.punch(10);
+      this.cameraManager.triggerShake(0.25);
       this.audioSystem.playOverclock();
     } else if (type === 'emp') {
       this.score += 15 * this.scoreMultiplier;

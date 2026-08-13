@@ -491,7 +491,12 @@ export class Engine {
         if (this.fxaaPass) {
             this.fxaaPass.material.uniforms.resolution.value.set(1 / (width * dpr), 1 / (height * dpr));
         }
-        if (this.fireflies) this.fireflies.setEnabled(level !== 'LOW');
+        if (this.fireflies) {
+            this.fireflies.setEnabled(level !== 'LOW');
+            this.fireflies.setLightCount(level === 'ULTRA' ? 5 : level === 'MED' ? 3 : 0);
+        }
+        this._envFrame = 0;
+        this._cloudFrame = 0;
         window.GLOW_ENABLED = bloomOn;
     }
 
@@ -520,8 +525,17 @@ export class Engine {
         if (this.dayNightCycle) {
             const camPos = this.camera ? this.camera.position : null;
             this.dayNightCycle.update(delta, camPos);
+            if (this.quality === 'LOW') this.sunLight.castShadow = false;
 
-            if (this.envTexture && this.envData) {
+            const night = this.dayNightCycle.nightAmount || 0;
+            if (this.bloomPass && this.bloomPass.enabled) {
+                const base = this.quality === 'ULTRA' ? 0.32 : 0.22;
+                this.bloomPass.strength = base + night * 0.18;
+            }
+            this.renderer.toneMappingExposure = (this.quality === 'LOW' ? 1.05 : 1.1) + night * 0.08;
+
+            this._envFrame = (this._envFrame || 0) + 1;
+            if (this.envTexture && this.envData && this._envFrame % 4 === 0) {
                 const c = this.dayNightCycle.currentSkyColor;
                 const r = Math.floor(c.r * 255);
                 const g = Math.floor(c.g * 255);
@@ -537,11 +551,13 @@ export class Engine {
             }
         }
 
-        if (this.voxelClouds) this.voxelClouds.update(delta);
+        this._cloudFrame = (this._cloudFrame || 0) + 1;
+        if (this.voxelClouds && this._cloudFrame % 2 === 0) this.voxelClouds.update(delta * 2);
+
         if (this.fireflies && this.dayNightCycle) {
-            this.fireflies.update(delta, this.dayNightCycle.timeOfDay);
+            this.fireflies.update(delta, this.dayNightCycle.timeOfDay, this.camera.position);
         }
-        if (this.ambientDust) this.ambientDust.update(delta);
+        if (this.ambientDust) this.ambientDust.update(delta, this.camera.position);
 
         if (this.speedStreakGroup && this.camera) {
             this.speedStreakGroup.visible = isBoosting;
