@@ -13,24 +13,29 @@ export class TextureFactory {
         texture.magFilter = THREE.NearestFilter;
         texture.minFilter = THREE.NearestFilter;
         texture.generateMipmaps = false;
-        
+        texture.colorSpace = THREE.SRGBColorSpace;
+        texture.anisotropy = 4;
         return texture;
     }
 
     static grassTop() {
         return this._createTexture((ctx, w, h) => {
-            ctx.fillStyle = '#5b8c31';
+            ctx.fillStyle = '#4e7a2c';
             ctx.fillRect(0, 0, w, h);
-            const palette = ['#74a443', '#4a7c28', '#3d6920'];
+            const palette = ['#5b8c31', '#74a443', '#3d6920', '#6b9a38', '#4a7c28', '#89b354'];
             for (let y = 0; y < h; y++) {
                 for (let x = 0; x < w; x++) {
-                    if (Math.random() < 0.35) {
+                    if (Math.random() < 0.55) {
                         ctx.fillStyle = palette[Math.floor(Math.random() * palette.length)];
                         ctx.fillRect(x, y, 1, 1);
                     }
                 }
             }
-        });
+            ctx.fillStyle = '#2f5418';
+            for (let i = 0; i < 18; i++) {
+                ctx.fillRect(Math.floor(Math.random() * w), Math.floor(Math.random() * h), 1, 2);
+            }
+        }, 32);
     }
 
     static grassSide() {
@@ -92,24 +97,25 @@ export class TextureFactory {
 
     static stone() {
         return this._createTexture((ctx, w, h) => {
-            ctx.fillStyle = '#737373';
+            ctx.fillStyle = '#6e6e72';
             ctx.fillRect(0, 0, w, h);
-            const palette = ['#949494', '#5a5a5a', '#636363'];
+            const palette = ['#8a8a90', '#5a5a60', '#78787e', '#4a4a50', '#9a9aa0'];
             for (let y = 0; y < h; y++) {
                 for (let x = 0; x < w; x++) {
-                    if (Math.random() < 0.40) {
+                    if (Math.random() < 0.45) {
                         ctx.fillStyle = palette[Math.floor(Math.random() * palette.length)];
                         ctx.fillRect(x, y, 1, 1);
                     }
                 }
             }
-            // Dark border
-            ctx.fillStyle = '#4a4a4a';
+            ctx.fillStyle = '#3a3a40';
             ctx.fillRect(0, 0, w, 1);
             ctx.fillRect(0, h - 1, w, 1);
             ctx.fillRect(0, 0, 1, h);
             ctx.fillRect(w - 1, 0, 1, h);
-        });
+            ctx.fillStyle = '#b0b0b6';
+            ctx.fillRect(1, 1, w - 3, 1);
+        }, 32);
     }
 
     static wood() {

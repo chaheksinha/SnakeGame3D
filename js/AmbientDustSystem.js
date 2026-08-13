@@ -5,7 +5,7 @@ export class AmbientDustSystem {
         this.scene = scene;
         this.time = 0;
         
-        const count = 400; // tiny floating specks for cinematic volumetric feel
+        const count = 220;
         const geo = new THREE.BufferGeometry();
         const pos = new Float32Array(count * 3);
         const phases = new Float32Array(count); 

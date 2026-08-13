@@ -81,7 +81,7 @@ export class Snake {
             }
         }
 
-        const mesh = VoxelMesher.build(voxels, 0.1, { roughness: 0.3, metalness: 0.5 });
+        const mesh = VoxelMesher.build(voxels, 0.1, { roughness: 0.28, metalness: 0.42, envMapIntensity: 1.05 });
         this.headGroup.add(mesh);
 
         // 3D FORKED FLICKERING TONGUE
@@ -144,7 +144,7 @@ export class Snake {
             }
         }
 
-        const mesh = VoxelMesher.build(voxels, 0.1, { roughness: 0.3, metalness: 0.5 });
+        const mesh = VoxelMesher.build(voxels, 0.1, { roughness: 0.32, metalness: 0.38, envMapIntensity: 0.95 });
         segmentGroup.add(mesh);
         
         return { mesh: segmentGroup, radius: 0.475 };

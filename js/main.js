@@ -84,6 +84,8 @@ class GameApp {
     
     this.setupInputs();
     this.setupUIButtons();
+    const gfxBtn = document.getElementById('settings-graphics-btn');
+    if (gfxBtn && this.engine.quality) gfxBtn.textContent = this.engine.quality;
 
     this.lastTime = performance.now();
     requestAnimationFrame((t) => this.gameLoop(t));
@@ -299,12 +301,13 @@ class GameApp {
         let idx = states.indexOf(e.target.textContent);
         idx = (idx + 1) % states.length;
         e.target.textContent = states[idx];
+        this.engine.setQuality(states[idx]);
     });
 
     document.getElementById('settings-bloom-btn')?.addEventListener('click', (e) => {
         const isOn = e.target.textContent === 'ON';
         e.target.textContent = isOn ? 'OFF' : 'ON';
-        window.GLOW_ENABLED = !isOn;
+        this.engine.setBloom(!isOn);
     });
   }
 

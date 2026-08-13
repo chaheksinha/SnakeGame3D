@@ -55,6 +55,15 @@ html, body {
   height: 100% !important;
 }
 
+#vignette {
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at center, rgba(0,0,0,0) 42%, rgba(8,10,18,0.42) 100%);
+}
+
 .hidden {
   display: none !important;
   opacity: 0;

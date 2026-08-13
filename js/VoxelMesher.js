@@ -69,7 +69,6 @@ export class VoxelMesher {
         for (const v of voxels) {
             const { x, y, z, color } = v;
             colorObj.setHex(color);
-            const r = colorObj.r, g = colorObj.g, b = colorObj.b;
 
             const cx = x * voxelSize;
             const cy = y * voxelSize;
@@ -80,8 +79,19 @@ export class VoxelMesher {
                 const ny = y + face.dir[1];
                 const nz = z + face.dir[2];
 
-                // If neighbor is empty, add this face
                 if (!map.has(`${nx},${ny},${nz}`)) {
+                    let shade = 1.0;
+                    if (face.dir[1] === 1) shade = 1.12;
+                    else if (face.dir[1] === -1) shade = 0.52;
+                    else if (face.dir[2] === 1) shade = 0.92;
+                    else if (face.dir[2] === -1) shade = 0.78;
+                    else if (face.dir[0] === 1) shade = 0.88;
+                    else shade = 0.72;
+
+                    const r = Math.min(1, colorObj.r * shade);
+                    const g = Math.min(1, colorObj.g * shade);
+                    const b = Math.min(1, colorObj.b * shade);
+
                     for (const corner of face.corners) {
                         positions.push(
                             cx + corner[0] * hs,
@@ -102,8 +112,9 @@ export class VoxelMesher {
 
         const material = new THREE.MeshStandardMaterial({
             vertexColors: true,
-            roughness: 0.8,
-            metalness: 0.1,
+            roughness: 0.55,
+            metalness: 0.18,
+            envMapIntensity: 0.85,
             ...materialParams
         });
 
